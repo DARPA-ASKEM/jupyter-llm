@@ -12,6 +12,7 @@ dev:
 .PHONY:dev-install
 dev-install:
 	poetry install; \
+	(cd dev_ui && npm install); \
 	ENVDIR=$$(poetry -q run python -c 'import os; print(os.environ.get("VIRTUAL_ENV", ""))'); \
 	KERNEL_INSTALL_PATH=$${ENVDIR}/share/jupyter/kernels/llmkernel; \
 	if [[ ! -e "$${KERNEL_INSTALL_PATH}" && -n "$${ENVDIR}" ]]; then \
