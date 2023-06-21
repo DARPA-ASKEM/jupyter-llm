@@ -17,8 +17,34 @@ body {
   bottom: 4px;
 }
 
+#left {
+  min-width: 200px;
+}
+
+#llmQueryInput {
+  margin-top: 2em;
+  margin-right: 0.5em;
+  width: 80%;
+}
+
+#context-node {
+  margin-top: 1em;
+}
+
+#context-node > input {
+  margin-right: 0.5em;
+}
+
+#data-preview {
+  white-space: pre;
+}
+
 .jp-NotebookPanel {
   border-bottom: 1px solid #e0e0e0;
+}
+
+.jp-MarkdownCell {
+  white-space: pre-wrap;
 }
 
 .notebookCommandPalette {

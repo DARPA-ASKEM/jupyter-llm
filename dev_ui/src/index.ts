@@ -18,7 +18,9 @@ import '../index.css';
 
 import { CommandRegistry } from '@lumino/commands';
 
-import { CommandPalette, SplitPanel, Widget } from '@lumino/widgets';
+import { CommandPalette, SplitPanel, Widget, Panel } from '@lumino/widgets';
+import { NotebookActions } from '@jupyterlab/notebook';
+import { CodeCell } from '@jupyterlab/cells';
 
 import { ServiceManager } from '@jupyterlab/services';
 import { MathJaxTypesetter } from '@jupyterlab/mathjax2';
@@ -111,9 +113,10 @@ function createApp(manager: ServiceManager.IManager): void {
 
   const notebookPath = PageConfig.getOption('notebookPath');
   const nbWidget = docManager.open(notebookPath) as NotebookPanel;
+  const notebook = nbWidget.content;
 
   const editor =
-    nbWidget.content.activeCell && nbWidget.content.activeCell.editor;
+    notebook.activeCell && notebook.activeCell.editor;
   const model = new CompleterModel();
   const completer = new Completer({ editor, model });
   const sessionContext = nbWidget.context.sessionContext;
@@ -128,26 +131,25 @@ function createApp(manager: ServiceManager.IManager): void {
     });
   });
 
-  console.log(nbWidget);
-  console.log(wFactory);
-  console.log(docManager);
-  console.log(model);
-
-  const handleMessage = (contex, msg) => {
+  const handleMessage = (context, msg) => {
     if (msg.msg_type === "status") {
       return;
     }
-    else if (msg.msg_type === "stream") {
-      // console.log("Possible LLM Thought: ", msg.content.text);
-      // console.log(nbWidget);
-      nbWidget.content.model.cells.nbmodel.addCell({id: `${msg.id}-text`, cell_type: 'markdown', source: msg.content.text})
+    if (msg.msg_type === "stream" && msg.parent_header?.msg_type == "llm_request") {
+      notebook.model.cells.nbmodel.addCell({id: `${msg.id}-text`, cell_type: 'markdown', source: msg.content.text});
     }
     else if (msg.msg_type === "llm_response") {
       const text = msg.content.text;
-      // alert(text)
-      nbWidget.content.model.cells.nbmodel.addCell({id: `${msg.id}-text`, cell_type: 'markdown', source: msg.content.text})
+      notebook.model.cells.nbmodel.addCell({id: `${msg.id}-text`, cell_type: 'markdown', source: msg.content.text});
+    }
+    else if (msg.msg_type === "dataset") {
+      dataPreviewWidget.node.textContent = formatDataPreview(msg.content);
     }
     else if (msg.msg_type === "code_cell") {
+      const code = msg.content.code;
+      notebook.model.cells.nbmodel.addCell({id: `${msg.id}-code`, cell_type: 'code', source: code});
+    }
+    else {
       console.log(msg);
     }
   }
@@ -162,16 +164,26 @@ function createApp(manager: ServiceManager.IManager): void {
   handler.editor = editor;
 
   // Listen for active cell changes.
-  nbWidget.content.activeCellChanged.connect((sender, cell) => {
+  notebook.activeCellChanged.connect((sender, cell) => {
     handler.editor = cell && cell.editor;
   });
 
   // Hide the widget when it first loads.
   completer.hide();
 
-  const setKernelContext = (kernel: IKernelConnection, context_info) => {
+  const formatDataPreview = (preview) => {
+    const output = [];
+    for (const line of preview.csv) {
+      output.push(line.join(","));
+    }
+    return output.join("\n");
+  };
+
+  const setKernelContext = (context_info) => {
+    const session = sessionContext.session;
+    const kernel = session?.kernel;
     const messageBody = {
-      session: props.llmContext.session?.name || '',
+      session: session?.name || '',
       channel: 'shell',
       content: context_info,
       msgType: 'context_setup_request',
@@ -179,7 +191,6 @@ function createApp(manager: ServiceManager.IManager): void {
     };
     const message: JupyterMessage = createMessage(messageBody);
     kernel?.sendShellMessage(message);
-    // kernelState.value = KernelState.busy;
   };
 
 
@@ -192,7 +203,7 @@ function createApp(manager: ServiceManager.IManager): void {
         channel: 'shell',
         content: { request: query },
         msgType: 'llm_request',
-        msgId: `${kernel.id}-setcontext`
+        msgId: `${kernel.id}-query`
       });
       kernel.sendShellMessage(message);
     }
@@ -200,32 +211,71 @@ function createApp(manager: ServiceManager.IManager): void {
   };
 
   const llmWidget = new Widget();
-  const llmNode = document.createElement('input')
+  const llmContainer = document.createElement('div');
+  const llmNode = document.createElement('input');
+  const llmButton = document.createElement('button');
+  llmContainer.appendChild(llmNode);
+  llmContainer.appendChild(llmButton);
+  llmNode.id = "llmQueryInput";
   llmNode.placeholder = 'Enter LLM query:';
   llmNode.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       sendLLMQuery(llmNode.value);
     }
   }, false);
-  llmWidget.node.appendChild(llmNode);
+  llmButton.addEventListener("click", (e) => {
+    sendLLMQuery(llmNode.value);
+  }, false);
+  llmButton.textContent = "Submit";
+  llmWidget.node.appendChild(llmContainer);
 
+  const contextWidget = new Widget();
+  const contextNode = document.createElement('div');
+  const contextNameInput = document.createElement('input');
+  const contextPayloadInput = document.createElement('input');
+  const contextButton = document.createElement('button');
+  contextNode.id = 'context-node';
+  contextNameInput.value = 'dataset';
+  contextPayloadInput.value = '{"id": "truth-incident-hospitalization"}';
+  contextButton.textContent = 'Submit';
+  contextButton.addEventListener("click", (e) => {
+    setKernelContext({
+      context: contextNameInput.value,
+      context_info: JSON.parse(contextPayloadInput.value),
+    })
+  }, false);
+  contextNode.appendChild(contextNameInput);
+  contextNode.appendChild(contextPayloadInput);
+  contextNode.appendChild(contextButton);
+  contextWidget.node.appendChild(contextNode);
 
-  const panel = new SplitPanel();
-  panel.id = 'main';
-  panel.orientation = 'horizontal';
-  panel.spacing = 0;
-  SplitPanel.setStretch(llmWidget, 1);
+  const dataPreviewWidget = new Widget();
+  dataPreviewWidget.id = 'data-preview';
+
+  const leftPanel = new Panel();
+  leftPanel.id = 'left';
+  leftPanel.orientation = 'vertical';
+  leftPanel.spacing = 0;
+  leftPanel.addWidget(llmWidget);
+  leftPanel.addWidget(contextWidget);
+  leftPanel.addWidget(dataPreviewWidget);
+
+  const mainPanel = new SplitPanel();
+  mainPanel.id = 'main';
+  mainPanel.orientation = 'horizontal';
+  mainPanel.spacing = 0;
+  SplitPanel.setStretch(leftPanel, 1);
   SplitPanel.setStretch(nbWidget, 2);
-  panel.addWidget(llmWidget);
-  panel.addWidget(nbWidget);
+  mainPanel.addWidget(leftPanel);
+  mainPanel.addWidget(nbWidget);
 
   // Attach the panel to the DOM.
-  Widget.attach(panel, document.body);
+  Widget.attach(mainPanel, document.body);
   Widget.attach(completer, document.body);
 
   // Handle resize events.
   window.addEventListener('resize', () => {
-    panel.update();
+    mainPanel.update();
   });
 
   SetupCommands(commands, nbWidget, handler);
