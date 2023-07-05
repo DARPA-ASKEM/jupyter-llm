@@ -133,7 +133,55 @@ KeyError: 'city'
 """.strip(),
             language = 'python',
             description = """The goal of this code is to extract a particular piece of information from a dictionary using a key, and print the retrieved value."""
-        )
+        ),
+
+        BrokenCode(
+            code = """
+import numpy as np
+
+a = np.array([1, 2, 3])
+b = np.array([4, 5])
+
+print(np.dot(a, b))
+""".strip(),
+            error = """
+File "/home/david/dev/archytas/archytas/test1.py", line 6, in <module>
+    print(np.dot(a, b))
+  File "<__array_function__ internals>", line 200, in dot
+ValueError: shapes (3,) and (2,) not aligned: 3 (dim 0) != 2 (dim 0)
+""".strip(),
+            language = 'python',
+            description = """The objective of this piece of code is to perform a dot product operation on two numerical arrays using a popular scientific computing library in Python, numpy."""
+        ),
+
+        BrokenCode(
+            code = """
+def recursive_function(n):
+    if n == 0:
+        return 1
+    else:
+        return n * recursive_function(n)
+
+recursive_function(5)
+""".strip(),
+            error = """
+Traceback (most recent call last):
+  File "/home/david/dev/archytas/archytas/test1.py", line 7, in <module>
+    recursive_function(5)
+  File "/home/david/dev/archytas/archytas/test1.py", line 5, in recursive_function
+    return n * recursive_function(n)
+  File "/home/david/dev/archytas/archytas/test1.py", line 5, in recursive_function
+    return n * recursive_function(n)
+  File "/home/david/dev/archytas/archytas/test1.py", line 5, in recursive_function
+    return n * recursive_function(n)
+  [Previous line repeated 995 more times]
+  File "/home/david/dev/archytas/archytas/test1.py", line 2, in recursive_function
+    if n == 0:
+RecursionError: maximum recursion depth exceeded in comparison
+""".strip(),
+            language = 'python',
+            description = """This code is an attempt to implement a function that performs a calculation involving recursion, with a specific base case defined for when the input is 0."""
+        ),
 ]
 
     for example in examples:
