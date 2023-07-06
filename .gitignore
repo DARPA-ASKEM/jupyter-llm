@@ -44,6 +44,10 @@ nb-configuration.xml
 # Local environment
 .env
 
+# autoenv scripts
+.autoenv
+.autoleave
+
 # Yarn
 .yarn/*
 !.yarn/patches
